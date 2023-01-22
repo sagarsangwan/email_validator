@@ -1,0 +1,3 @@
+Flask==2.2.2
+dnspython==2.0.0
+validate_email==1.3
