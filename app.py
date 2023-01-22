@@ -1,46 +1,43 @@
-
-
-from flask import Flask, request
-import smtplib
+from flask import Flask, request, jsonify
+import re
 import dns.resolver
+import smtplib
 
 app = Flask(__name__)
 
 
 @app.route('/', methods=['GET'])
-def email_validation():
+def index():
     email = request.args.get('email')
     print(email)
-    valid = is_valid_email(email)
-    if valid:
-        # Look up MX records and try to connect to the SMTP server
-        try:
-            domain = email.split('@')[-1]
-            mx_records = dns.resolver.query(domain, 'MX')
-            mx_record = mx_records[0].exchange
-            smtp_server = str(mx_record)
-            server = smtplib.SMTP()
-            server.connect(smtp_server)
-            server.helo()
-            server.mail('you@example.com')
-            code, message = server.rcpt(str(email))
-            server.quit()
-            # return positive response
-            if code == 250:
-                return 'Email is valid'
-            else:
-                return 'Email is not valid'
-        except Exception as e:
-            return 'Email is not valid'
+    if not email:
+        return jsonify({"error": "Please provide an email address as a GET parameter"}), 400
+    if not is_valid_email(email):
+        return jsonify({"error": "Invalid email address"}), 400
+    try:
+        mx_records = dns.resolver.query(email.split('@')[-1], 'MX')
+    except dns.resolver.NXDOMAIN:
+        return jsonify({"error": "Invalid domain"}), 400
+    mx_record = str(mx_records[0].exchange)
+    try:
+        server = smtplib.SMTP(mx_record)
+        server.helo()
+        server.mail('you@example.com')
+        code, message = server.rcpt(str(email))
+        server.quit()
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+    if code == 250:
+        return jsonify({"status": "valid"})
     else:
-        return 'Email is not valid'
+        return jsonify({"status": "invalid"})
 
 
 def is_valid_email(email):
-    if len(email) > 7:
-        if re.match("^.+@([?)[a-zA-Z0-9-.]+.([a-zA-Z]{2,3}|[0-9]{1,3})(]?)$", email) != None:
-            return True
-    return False
+    """Check if the email address is valid"""
+    match = re.match(
+        '^[_a-z0-9-]+(\.[_a-z0-9-]+)*@[a-z0-9-]+(\.[a-z0-9-]+)*(\.[a-z]{2,4})$', email)
+    return match != None
 
 
 if __name__ == '__main__':
